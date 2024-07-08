@@ -1,5 +1,3 @@
-// content.js
-
 // 페이지에 버튼 추가
 const button = document.createElement('button');
 button.textContent = 'Save API to Local Storage';
@@ -16,9 +14,36 @@ button.style.cursor = 'pointer';
 button.addEventListener('click', saveAPIToLocalStorage);
 document.body.appendChild(button);
 
+// 페이지에 URL 입력 필드 추가
+const input = document.createElement('input');
+input.type = 'text';
+input.placeholder = 'Enter API URL';
+input.style.position = 'fixed';
+input.style.top = '50px';
+input.style.right = '10px';
+input.style.zIndex = '1000';
+input.style.padding = '10px';
+input.style.border = '1px solid #ccc';
+input.style.borderRadius = '5px';
+document.body.appendChild(input);
+
+// 저장된 URL 로드
+const savedURL = localStorage.getItem('apiURL');
+if (savedURL) {
+    input.value = savedURL;
+}
+
 async function saveAPIToLocalStorage() {
+    const apiURL = input.value.trim();
+    if (!apiURL) {
+        alert('Please enter a valid API URL.');
+        return;
+    }
+
+    localStorage.setItem('apiURL', apiURL); // URL을 로컬 스토리지에 저장
+
     try {
-        const apiData = await fetchAPIData();
+        const apiData = await fetchAPIData(apiURL);
         localStorage.setItem('apiData', JSON.stringify(apiData));
         alert('API data has been saved to local storage.');
     } catch (error) {
@@ -27,8 +52,8 @@ async function saveAPIToLocalStorage() {
     }
 }
 
-async function fetchAPIData() {
-    const response = await fetch('http://127.0.0.1:8080/v2/v3/api-docs');
+async function fetchAPIData(apiURL) {
+    const response = await fetch(apiURL);
     if (!response.ok) {
         throw new Error('Network response was not ok');
     }
@@ -77,12 +102,18 @@ function resolveRef(schema, apiDoc) {
 
 async function compareAndHighlightChanges() {
     try {
+        const apiURL = localStorage.getItem('apiURL');
+        if (!apiURL) {
+            console.error('No API URL found in local storage.');
+            return;
+        }
+
         const storedAPIs = JSON.parse(localStorage.getItem('apiData') || '{}');
-        const newAPIs = await fetchAPIData();
+        const newAPIs = await fetchAPIData(apiURL);
 
         document.querySelectorAll('.opblock').forEach((element) => {
             const apiId = element.querySelector('.opblock-summary-path').textContent.trim();
-            const method = element.querySelector('.opblock-summary-method').textContent.trim().toUpperCase();
+            const method = element.querySelector('.opblock-summary-method').textContent.trim();
             const apiKey = `${method} ${apiId}`;
 
             if (newAPIs[apiKey]) {
@@ -107,8 +138,6 @@ async function compareAndHighlightChanges() {
                 } else {
                     element.style.border = '2px solid red'; // 새로운 API 항목에 빨간 테두리 적용
                 }
-            } else {
-                element.style.border = '2px solid red'; // 삭제된 API 항목에 빨간 테두리 적용
             }
         });
     } catch (error) {

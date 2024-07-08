@@ -5,7 +5,8 @@
     "description": "Customize the appearance of Swagger UI.",
     "permissions": [
         "activeTab",
-        "storage"
+        "storage",
+        "scripting"
     ],
     "content_scripts": [
         {
@@ -13,10 +14,11 @@
                 "*://*:*/*swagger-ui*"
             ],
             "js": [
-                "content.js"
+                "contents/content.js"
             ],
+            "type": "module",
             "css": [
-                "styles.css"
+                "ui/styles.css"
             ]
         }
     ]
