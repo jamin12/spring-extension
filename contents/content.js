@@ -33,10 +33,54 @@ if (savedURL) {
     input.value = savedURL;
 }
 
+// 좌측 상단에 메뉴 버튼 추가
+const menuButton = document.createElement('button');
+menuButton.textContent = '☰';
+menuButton.style.position = 'fixed';
+menuButton.style.top = '10px';
+menuButton.style.left = '10px';
+menuButton.style.zIndex = '1000';
+menuButton.style.padding = '10px 20px';
+menuButton.style.backgroundColor = '#4CAF50';
+menuButton.style.color = 'white';
+menuButton.style.border = 'none';
+menuButton.style.borderRadius = '5px';
+menuButton.style.cursor = 'pointer';
+menuButton.addEventListener('click', toggleMenu);
+document.body.appendChild(menuButton);
+
+// 좌측 상단에 메뉴 생성
+const menu = document.createElement('div');
+menu.style.position = 'fixed';
+menu.style.top = '50px';
+menu.style.left = '10px';
+menu.style.zIndex = '1000';
+menu.style.padding = '10px';
+menu.style.border = '1px solid #ccc';
+menu.style.borderRadius = '5px';
+menu.style.backgroundColor = 'white';
+menu.style.display = 'none';
+document.body.appendChild(menu);
+
+function toggleMenu() {
+    menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+// 인디케이터 컨테이너 생성
+const indicatorContainer = document.createElement('div');
+indicatorContainer.style.position = 'fixed';
+indicatorContainer.style.top = '0';
+indicatorContainer.style.right = '0';
+indicatorContainer.style.width = '5px';
+indicatorContainer.style.height = '100%';
+indicatorContainer.style.zIndex = '999';
+indicatorContainer.style.backgroundColor = 'rgba(0,0,0,0.1)';
+document.body.appendChild(indicatorContainer);
+
 async function saveAPIToLocalStorage() {
     const apiURL = input.value.trim();
     if (!apiURL) {
-        alert('Please enter a valid API URL.');
+        alert('네트워크창에서 api doc을 읽어오는 url을 등록해주세요');
         return;
     }
 
@@ -45,10 +89,10 @@ async function saveAPIToLocalStorage() {
     try {
         const apiData = await fetchAPIData(apiURL);
         localStorage.setItem('apiData', JSON.stringify(apiData));
-        alert('API data has been saved to local storage.');
+        alert('api정보가 저장되었습니다.');
     } catch (error) {
-        console.error('Failed to fetch API document:', error);
-        alert('Failed to fetch API document.');
+        console.error('네트워크창에서 api doc을 읽어오는 url을 등록해주세요:', error);
+        alert('네트워크창에서 api doc을 읽어오는 url을 등록해주세요');
     }
 }
 
@@ -111,7 +155,9 @@ async function compareAndHighlightChanges() {
         const storedAPIs = JSON.parse(localStorage.getItem('apiData') || '{}');
         const newAPIs = await fetchAPIData(apiURL);
 
-        document.querySelectorAll('.opblock').forEach((element) => {
+        menu.innerHTML = ''; // 메뉴 초기화
+
+        document.querySelectorAll('.opblock').forEach((element, index) => {
             const apiId = element.querySelector('.opblock-summary-path').textContent.trim();
             const method = element.querySelector('.opblock-summary-method').textContent.trim();
             const apiKey = `${method} ${apiId}`;
@@ -134,15 +180,35 @@ async function compareAndHighlightChanges() {
                         !deepEqual(newResponses, storedResponses)
                     ) {
                         element.style.border = '2px solid red'; // 변경된 API 항목에 빨간 테두리 적용
+                        addIndicator(index, apiId, method); // 인디케이터 추가
                     }
                 } else {
                     element.style.border = '2px solid red'; // 새로운 API 항목에 빨간 테두리 적용
+                    addIndicator(index, apiId, method); // 인디케이터 추가
                 }
             }
         });
     } catch (error) {
         console.error('Failed to fetch API document:', error);
     }
+}
+
+function addIndicator(index, apiId, method) {
+    const menuItem = document.createElement('button');
+    menuItem.textContent = `${method} ${apiId}`;
+    menuItem.style.display = 'block';
+    menuItem.style.margin = '5px 0';
+    menuItem.style.padding = '5px';
+    menuItem.style.width = '100%';
+    menuItem.style.textAlign = 'left';
+    menuItem.style.backgroundColor = '#f9f9f9';
+    menuItem.style.border = '1px solid #ddd';
+    menuItem.style.borderRadius = '3px';
+    menuItem.style.cursor = 'pointer';
+    menuItem.addEventListener('click', () => {
+        document.querySelectorAll('.opblock')[index].scrollIntoView({ behavior: 'smooth' });
+    });
+    menu.appendChild(menuItem);
 }
 
 // 배열 비교 함수
