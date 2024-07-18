@@ -158,8 +158,15 @@ async function compareAndHighlightChanges() {
         menu.innerHTML = ''; // 메뉴 초기화
 
         document.querySelectorAll('.opblock').forEach((element, index) => {
-            const apiId = element.querySelector('.opblock-summary-path').textContent.trim();
+            const apiId_path = element.querySelector('.opblock-summary-path');
+            let apiId;
+            if (apiId_path === null) {
+                apiId = element.querySelector('.opblock-summary-path__deprecated').textContent.trim()
+            } else {
+                apiId = apiId_path.textContent.trim()
+            }
             const method = element.querySelector('.opblock-summary-method').textContent.trim();
+
             const apiKey = `${method} ${apiId}`;
 
             if (newAPIs[apiKey]) {
@@ -181,10 +188,12 @@ async function compareAndHighlightChanges() {
                     ) {
                         element.style.border = '2px solid red'; // 변경된 API 항목에 빨간 테두리 적용
                         addIndicator(index, apiId, method); // 인디케이터 추가
+                        addUpdateButton(element, apiKey, newAPIs[apiKey]); // 업데이트 버튼 추가
                     }
                 } else {
                     element.style.border = '2px solid red'; // 새로운 API 항목에 빨간 테두리 적용
                     addIndicator(index, apiId, method); // 인디케이터 추가
+                    addUpdateButton(element, apiKey, newAPIs[apiKey]); // 업데이트 버튼 추가
                 }
             }
         });
@@ -209,6 +218,34 @@ function addIndicator(index, apiId, method) {
         document.querySelectorAll('.opblock')[index].scrollIntoView({ behavior: 'smooth' });
     });
     menu.appendChild(menuItem);
+}
+
+function addUpdateButton(element, apiKey, newAPI) {
+    const existingButton = element.querySelector('.update-api-button');
+    if (existingButton) {
+        return; // 이미 버튼이 있는 경우 중복 추가하지 않음
+    }
+
+    const updateButton = document.createElement('button');
+    updateButton.textContent = 'Update API';
+    updateButton.className = 'update-api-button';
+    updateButton.style.marginRight = '10px';
+    updateButton.style.padding = '5px 10px';
+    updateButton.style.backgroundColor = '#FF5733';
+    updateButton.style.color = 'white';
+    updateButton.style.border = 'none';
+    updateButton.style.borderRadius = '3px';
+    updateButton.style.cursor = 'pointer';
+    updateButton.addEventListener('click', () => {
+        let storedAPIs = JSON.parse(localStorage.getItem('apiData') || '{}');
+        storedAPIs[apiKey] = newAPI;
+        localStorage.setItem('apiData', JSON.stringify(storedAPIs));
+        element.style.border = ''; // 빨간 테두리 제거
+        updateButton.remove(); // 업데이트 버튼 제거
+    });
+
+    const summaryElement = element.querySelector('.opblock-summary');
+    summaryElement.insertBefore(updateButton, summaryElement.firstChild);
 }
 
 // 배열 비교 함수
