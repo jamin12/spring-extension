@@ -60,6 +60,9 @@ menu.style.border = '1px solid #ccc';
 menu.style.borderRadius = '5px';
 menu.style.backgroundColor = 'white';
 menu.style.display = 'none';
+menu.style.overflowY = 'auto';
+menu.style.maxHeight = '400px'; // 필요에 따라 높이를 조정하세요.
+menu.style.display = 'none';
 document.body.appendChild(menu);
 
 function toggleMenu() {
@@ -76,6 +79,175 @@ indicatorContainer.style.height = '100%';
 indicatorContainer.style.zIndex = '999';
 indicatorContainer.style.backgroundColor = 'rgba(0,0,0,0.1)';
 document.body.appendChild(indicatorContainer);
+
+// 모달 생성
+const modal = document.createElement('div');
+modal.style.position = 'fixed';
+modal.style.top = '50%';
+modal.style.left = '50%';
+modal.style.transform = 'translate(-50%, -50%)';
+modal.style.zIndex = '2000';
+modal.style.padding = '20px';
+modal.style.border = '1px solid #ccc';
+modal.style.borderRadius = '5px';
+modal.style.backgroundColor = 'white';
+modal.style.maxWidth = '80%'; // 모달 최대 너비
+modal.style.maxHeight = '80%'; // 모달 최대 높이
+modal.style.overflowY = 'auto'; // 세로 스크롤 허용
+modal.style.overflowX = 'auto'; // 가로 스크롤 허용
+modal.style.display = 'none'; // 기본적으로 모달은 숨김
+document.body.appendChild(modal);
+
+// 모달 오버레이 생성
+const modalOverlay = document.createElement('div');
+modalOverlay.style.position = 'fixed';
+modalOverlay.style.top = '0';
+modalOverlay.style.left = '0';
+modalOverlay.style.width = '100vw';
+modalOverlay.style.height = '100vh';
+modalOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)'; // 반투명한 검은 배경
+modalOverlay.style.zIndex = '1999'; // 모달 아래에 위치하도록 설정
+modalOverlay.style.display = 'none'; // 기본적으로 숨김
+document.body.appendChild(modalOverlay);
+
+// X 닫기 버튼 생성 및 스타일 설정
+const closeModalButton = document.createElement('button');
+closeModalButton.textContent = '✖';
+closeModalButton.style.position = 'absolute';
+closeModalButton.style.top = '10px';
+closeModalButton.style.right = '10px';
+closeModalButton.style.background = 'transparent';
+closeModalButton.style.border = 'none';
+closeModalButton.style.fontSize = '20px';
+closeModalButton.style.cursor = 'pointer';
+closeModalButton.addEventListener('click', () => {
+    modal.style.display = 'none';
+});
+modal.appendChild(closeModalButton);
+
+// ESC 키를 누르면 모달을 닫는 이벤트 리스너 추가
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') { // ESC 키가 눌렸는지 확인
+        modal.style.display = 'none'; // 모달 닫기
+        modalOverlay.style.display = 'none'; // 모달과 오버레이를 함께 숨김
+    }
+});
+
+// 모달 외부 클릭 시 모달 닫기
+modalOverlay.addEventListener('click', (event) => {
+    if (event.target === modalOverlay) {
+        modalOverlay.style.display = 'none'; // 모달과 오버레이를 함께 숨김
+        modal.style.display = 'none'; // 모달 닫기
+    }
+});
+
+function generateDiffContent(previousAPI, currentAPI) {
+    // JSON 데이터를 객체 단위로 비교하고 하이라이트 처리
+    const diffContent = `
+        <div style="display: flex; flex-direction: column; max-width: 100%; height: 100%;">
+            <div style="display: flex; justify-content: space-between; padding: 20px; background-color: #fafafa; flex-grow: 1; gap: 20px;">
+                <div style="flex: 1; padding: 10px; background-color: #ffffff; border: 1px solid #ccc; border-radius: 5px; overflow-y: auto;">
+                    <h3 style="text-align: center; margin-bottom: 10px;">이전 API</h3>
+                    <pre>${highlightJsonDifferences(previousAPI, currentAPI)}</pre>
+                </div>
+                <div style="flex: 1; padding: 10px; background-color: #f9f9f9; border: 1px solid #ccc; border-radius: 5px; overflow-y: auto;">
+                    <h3 style="text-align: center; margin-bottom: 10px;">현재 API</h3>
+                    <pre>${highlightJsonDifferences(currentAPI, previousAPI)}</pre>
+                </div>
+            </div>
+        </div>
+    `;
+
+    return diffContent;
+}
+
+function highlightJsonDifferences(obj1, obj2) {
+    let result = '';
+
+    // 객체를 순회하며 차이점 찾기
+    for (const key in obj1) {
+        if (obj1.hasOwnProperty(key)) {
+            if (typeof obj1[key] === 'object' && typeof obj2[key] === 'object') {
+                // 중첩된 객체인 경우 재귀적으로 비교
+                result += `"${key}": {\n${highlightJsonDifferences(obj1[key], obj2[key])}\n},\n`;
+            } else if (obj1[key] !== obj2[key]) {
+                // 값이 다를 경우 하이라이트 처리
+                result += `<span style="background-color: #ffcccc;">"${key}": ${JSON.stringify(obj1[key])}</span>,\n`;
+            } else {
+                // 값이 같을 경우 그대로 출력
+                result += `"${key}": ${JSON.stringify(obj1[key])},\n`;
+            }
+        }
+    }
+
+    return result;
+
+
+}
+
+function showModal(content) {
+    modal.innerHTML = content; // 모달에 내용을 추가
+    modal.appendChild(closeModalButton); // 닫기 버튼 다시 추가
+    modalOverlay.style.display = 'block'; // 모달과 오버레이를 함께 표시
+    modal.style.display = 'block';
+}
+
+function addIndicator(index, apiId, method, status) {
+    const menuItem = document.createElement('div');
+    menuItem.style.display = 'flex'; // Flexbox로 레이아웃 구성
+    menuItem.style.justifyContent = 'space-between';
+    menuItem.style.alignItems = 'center';
+    menuItem.style.margin = '5px 0';
+    menuItem.style.padding = '5px';
+    menuItem.style.width = '100%';
+    menuItem.style.textAlign = 'left';
+    menuItem.style.backgroundColor = '#f9f9f9';
+    menuItem.style.border = '1px solid #ddd';
+    menuItem.style.borderRadius = '3px';
+
+    // API 정보 텍스트
+    const menuItemText = document.createElement('span');
+    menuItemText.textContent = `${method} ${apiId}`;
+    menuItemText.style.flexGrow = '1'; // 남은 공간을 차지하게 함
+    menuItemText.style.cursor = 'pointer'; // 클릭 가능하게 설정
+
+    menuItemText.addEventListener('click', () => {
+        document.querySelectorAll('.opblock')[index].scrollIntoView({ behavior: 'smooth' });
+    });
+
+    menuItem.appendChild(menuItemText);
+
+    if (status === 'created') {
+        const statusText = document.createElement('span');
+        statusText.textContent = '생성됨';
+        statusText.style.color = 'green';
+        menuItem.appendChild(statusText);
+    } else if (status === 'modified') {
+        const diffButton = document.createElement('button');
+        diffButton.textContent = '차이점';
+        diffButton.style.marginLeft = '10px';
+        diffButton.style.padding = '3px 5px';
+        diffButton.style.backgroundColor = '#FF5733';
+        diffButton.style.color = 'white';
+        diffButton.style.border = 'none';
+        diffButton.style.borderRadius = '3px';
+        diffButton.style.cursor = 'pointer';
+
+        diffButton.addEventListener('click', (event) => {
+            event.stopPropagation(); // 부모 요소의 클릭 이벤트 전파 방지
+            const storedAPIs = JSON.parse(localStorage.getItem('apiData') || '{}');
+            const previousAPI = storedAPIs[`${method} ${apiId}`];
+            const currentAPI = newAPIs[`${method} ${apiId}`];
+
+            const diffContent = generateDiffContent(previousAPI, currentAPI);
+            showModal(diffContent);
+        });
+
+        menuItem.appendChild(diffButton); // 버튼을 오른쪽 끝에 추가
+    }
+
+    menu.appendChild(menuItem);
+}
 
 async function saveAPIToLocalStorage() {
     const apiURL = input.value.trim();
@@ -144,6 +316,8 @@ function resolveRef(schema, apiDoc) {
     return schema;
 }
 
+let newAPIs = {}
+
 async function compareAndHighlightChanges() {
     try {
         const apiURL = localStorage.getItem('apiURL');
@@ -153,7 +327,7 @@ async function compareAndHighlightChanges() {
         }
 
         const storedAPIs = JSON.parse(localStorage.getItem('apiData') || '{}');
-        const newAPIs = await fetchAPIData(apiURL);
+        newAPIs = await fetchAPIData(apiURL);
 
         menu.innerHTML = ''; // 메뉴 초기화
 
@@ -187,12 +361,12 @@ async function compareAndHighlightChanges() {
                         !deepEqual(newResponses, storedResponses)
                     ) {
                         element.style.border = '2px solid red'; // 변경된 API 항목에 빨간 테두리 적용
-                        addIndicator(index, apiId, method); // 인디케이터 추가
+                        addIndicator(index, apiId, method, "modified"); // 인디케이터 추가
                         addUpdateButton(element, apiKey, newAPIs[apiKey]); // 업데이트 버튼 추가
                     }
                 } else {
                     element.style.border = '2px solid red'; // 새로운 API 항목에 빨간 테두리 적용
-                    addIndicator(index, apiId, method); // 인디케이터 추가
+                    addIndicator(index, apiId, method, "created"); // 인디케이터 추가
                     addUpdateButton(element, apiKey, newAPIs[apiKey]); // 업데이트 버튼 추가
                 }
             }
@@ -200,24 +374,6 @@ async function compareAndHighlightChanges() {
     } catch (error) {
         console.error('Failed to fetch API document:', error);
     }
-}
-
-function addIndicator(index, apiId, method) {
-    const menuItem = document.createElement('button');
-    menuItem.textContent = `${method} ${apiId}`;
-    menuItem.style.display = 'block';
-    menuItem.style.margin = '5px 0';
-    menuItem.style.padding = '5px';
-    menuItem.style.width = '100%';
-    menuItem.style.textAlign = 'left';
-    menuItem.style.backgroundColor = '#f9f9f9';
-    menuItem.style.border = '1px solid #ddd';
-    menuItem.style.borderRadius = '3px';
-    menuItem.style.cursor = 'pointer';
-    menuItem.addEventListener('click', () => {
-        document.querySelectorAll('.opblock')[index].scrollIntoView({ behavior: 'smooth' });
-    });
-    menu.appendChild(menuItem);
 }
 
 function addUpdateButton(element, apiKey, newAPI) {
