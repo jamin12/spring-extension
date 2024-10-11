@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Swagger UI Customizer",
+  "version": "1.0",
+  "description": "Customize the appearance of Swagger UI.",
+  "permissions": ["activeTab", "storage", "scripting"],
+  "content_scripts": [
+    {
+      "matches": ["*://*:*/*swagger-ui*"],
+      "js": ["content.js"],
+      "type": "module",
+      "css": ["styles.css"]
+    }
+  ],
+  "action": {
+    "128": "images/spring-extension-icon.png"
+  },
+  "icons": {
+    "128": "images/spring-extension-icon.png"
+  }
+}
