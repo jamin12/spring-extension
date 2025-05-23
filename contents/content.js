@@ -423,22 +423,59 @@ function isSwaggerLoaded() {
     return document.querySelectorAll('.opblock').length > 0;
 }
 
+// Function to handle clicks on Swagger UI for tag expansion
+function handleSwaggerUiClick(event) {
+    // Check if the click was on or inside a tag header
+    const clickedTagHeader = event.target.closest('.opblock-tag');
+
+    if (clickedTagHeader) {
+        // If a tag header was clicked, it's likely an expand/collapse action.
+        // Re-run the comparison logic after a short delay to allow the DOM to update.
+        setTimeout(() => {
+            console.log("Swagger tag clicked, re-applying highlights."); // For debugging
+            compareAndHighlightChanges();
+        }, 100); // Adjust delay if needed
+    }
+}
+
 // MutationObserver를 사용하여 API 블록 로드를 감지
-const observer = new MutationObserver((mutations) => {
-    mutations.forEach((mutation) => {
-        if (mutation.addedNodes.length || mutation.removedNodes.length) {
-            if (isSwaggerLoaded()) {
-                compareAndHighlightChanges();
-                observer.disconnect(); // Swagger 문서가 완성되면 관찰 중지
-            }
+const observer = new MutationObserver((mutations, obs) => {
+    const swaggerUiElement = document.getElementById('swagger-ui'); // Get it fresh
+    if (swaggerUiElement && isSwaggerLoaded()) { // Check if still in document and swagger is ready
+        console.log("Swagger UI detected by observer, running comparison.");
+        compareAndHighlightChanges();
+
+        if (!swaggerUiElement.hasAttribute('data-custom-click-listener')) {
+            swaggerUiElement.addEventListener('click', handleSwaggerUiClick);
+            swaggerUiElement.setAttribute('data-custom-click-listener', 'true');
+            console.log("Tag click listener added via MutationObserver.");
         }
-    });
+        obs.disconnect(); // Disconnect after setup
+    }
 });
 
 const config = { childList: true, subtree: true };
 const targetNode = document.getElementById('swagger-ui');
+
 if (targetNode) {
+    // Initial check in case swagger is already fully loaded
+    if (isSwaggerLoaded()) {
+        console.log("Swagger UI already loaded on initial check.");
+        compareAndHighlightChanges();
+        if (!targetNode.hasAttribute('data-custom-click-listener')) {
+            targetNode.addEventListener('click', handleSwaggerUiClick);
+            targetNode.setAttribute('data-custom-click-listener', 'true');
+            console.log("Tag click listener added on initial load (no observer needed yet).");
+        }
+        // If listener is added here, the observer might not strictly need to run or disconnect.
+        // However, keeping observer logic for robustness in case isSwaggerLoaded was initially false
+        // but becomes true before observer fully processes.
+    }
     observer.observe(targetNode, config);
 } else {
-    console.error('Swagger UI root element not found.');
+    console.error('Swagger UI root element (#swagger-ui) not found for observer setup.');
+    // Fallback for when swagger-ui is not immediately available.
+    // A more robust solution might involve a global listener or retrying to find #swagger-ui.
+    // For now, we rely on #swagger-ui being present for the observer to attach.
+    // If #swagger-ui appears later, this script might need to be re-run or have a more dynamic setup.
 }
