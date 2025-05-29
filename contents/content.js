@@ -91,7 +91,8 @@ modal.style.padding = '20px';
 modal.style.border = '1px solid #ccc';
 modal.style.borderRadius = '5px';
 modal.style.backgroundColor = 'white';
-modal.style.maxWidth = '80%'; // 모달 최대 너비
+modal.style.maxWidth = '95%'; // 모달 최대 너비
+modal.style.width = '40%'; // 모달 너비
 modal.style.maxHeight = '80%'; // 모달 최대 높이
 modal.style.overflowY = 'auto'; // 세로 스크롤 허용
 modal.style.overflowX = 'auto'; // 가로 스크롤 허용
@@ -142,48 +143,97 @@ modalOverlay.addEventListener('click', (event) => {
 });
 
 function generateDiffContent(previousAPI, currentAPI) {
-    // JSON 데이터를 객체 단위로 비교하고 하이라이트 처리
-    const diffContent = `
-        <div style="display: flex; flex-direction: column; max-width: 100%; height: 100%;">
-            <div style="display: flex; justify-content: space-between; padding: 20px; background-color: #fafafa; flex-grow: 1; gap: 20px;">
-                <div style="flex: 1; padding: 10px; background-color: #ffffff; border: 1px solid #ccc; border-radius: 5px; overflow-y: auto;">
-                    <h3 style="text-align: center; margin-bottom: 10px;">이전 API</h3>
-                    <pre>${highlightJsonDifferences(previousAPI, currentAPI)}</pre>
-                </div>
-                <div style="flex: 1; padding: 10px; background-color: #f9f9f9; border: 1px solid #ccc; border-radius: 5px; overflow-y: auto;">
-                    <h3 style="text-align: center; margin-bottom: 10px;">현재 API</h3>
-                    <pre>${highlightJsonDifferences(currentAPI, previousAPI)}</pre>
-                </div>
+    
+    const diffOutput = highlightJsonDifferences(currentAPI, previousAPI, 0); // currentAPI is obj1, previousAPI is obj2
+    
+    const diffModalContent = `
+        <div style="display: flex; flex-direction: column; max-width: 100%; height: 100%; /* Ensure modal takes height */">
+            <div style="padding: 10px; background-color: #ffffff; border: 1px solid #ccc; border-radius: 5px; overflow-y: auto; flex-grow: 1; /* Allow content to scroll */">
+                <h3 style="text-align: center; margin-bottom: 10px; position: sticky; top: 0; background: white; z-index: 1;">API 변경 사항 (현재 API 기준)</h3>
+                <pre style="white-space: pre-wrap; word-wrap: break-word;">{
+${diffOutput}
+}</pre>
             </div>
         </div>
     `;
-
-    return diffContent;
+    return diffModalContent;
 }
 
-function highlightJsonDifferences(obj1, obj2) {
-    let result = '';
+// obj1 is currentAPI, obj2 is previousAPI
+function highlightJsonDifferences(obj1, obj2, indentLevel = 0) {
+    let diffLines = [];
+    const indent = "  ".repeat(indentLevel); // Base indent for the object's braces
+    const childIndent = "  ".repeat(indentLevel + 1); // Indent for key-value lines
 
-    // 객체를 순회하며 차이점 찾기
-    for (const key in obj1) {
-        if (obj1.hasOwnProperty(key)) {
-            if (typeof obj1[key] === 'object' && typeof obj2[key] === 'object') {
-                // 중첩된 객체인 경우 재귀적으로 비교
-                result += `"${key}": {\n${highlightJsonDifferences(obj1[key], obj2[key])}\n},\n`;
-            } else if (obj1[key] !== obj2[key]) {
-                // 값이 다를 경우 하이라이트 처리
-                result += `<span style="background-color: #ffcccc;">"${key}": ${JSON.stringify(obj1[key])}</span>,\n`;
+    // Handle cases where obj1 or obj2 might be undefined (e.g. a whole object added/deleted in recursive calls)
+    const currentObj = obj1 || {}; 
+    const previousObj = obj2 || {};
+
+    const currentKeys = new Set(Object.keys(currentObj));
+    const previousKeys = new Set(Object.keys(previousObj));
+    const allKeys = new Set([...currentKeys, ...previousKeys]);
+
+    allKeys.forEach(key => {
+        if (key === "responses") {
+            return; // Skip processing for the "responses" key
+        }
+        const currentValue = currentObj[key];
+        const previousValue = previousObj[key];
+        const currentExists = currentKeys.has(key);
+        const previousExists = previousKeys.has(key);
+
+        let keyString = `${childIndent}"${key}": `;
+        let valueOutput; // String representation of the value, possibly with recursive diff
+        let lineStyle = "";    // Style for the entire line if value is primitive and changed, or key is added/deleted
+        let keySpecificStyle = ""; // Style for the key itself if its corresponding value is an object that's modified
+
+        if (currentExists && !previousExists) { // ADDED to current
+            lineStyle = "background-color: #ddffdd;"; // Green
+            if (typeof currentValue === 'object' && currentValue !== null) {
+                valueOutput = `{\n${highlightJsonDifferences(currentValue, undefined, indentLevel + 1)}\n${childIndent}}`;
+                diffLines.push(`<span style="${lineStyle}">${keyString}${valueOutput}</span>`);
             } else {
-                // 값이 같을 경우 그대로 출력
-                result += `"${key}": ${JSON.stringify(obj1[key])},\n`;
+                valueOutput = JSON.stringify(currentValue);
+                // For added primitive values, the style should be on the value itself, not the whole line.
+                // However, the provided example structure highlights the whole line for added/deleted keys.
+                // To match the example, we'll highlight the line.
+                diffLines.push(`<span style="${lineStyle}">${keyString}${valueOutput}</span>`);
+            }
+        } else if (!currentExists && previousExists) { // DELETED from current (was in previous)
+            lineStyle = "background-color: #ffdddd; text-decoration: line-through;"; // Red, strikethrough
+            if (typeof previousValue === 'object' && previousValue !== null) {
+                // For deleted objects, pass 'undefined' as currentObj to guide recursion
+                valueOutput = `{\n${highlightJsonDifferences(undefined, previousValue, indentLevel + 1)}\n${childIndent}}`;
+            } else {
+                valueOutput = JSON.stringify(previousValue);
+            }
+            diffLines.push(`<span style="${lineStyle}">${keyString}${valueOutput}</span>`);
+        } else if (!deepEqual(currentValue, previousValue)) { // MODIFIED
+            // keySpecificStyle = "background-color: #ddffdd;"; // Green for key of modified/new value - REMOVED for object keys
+            valueOutput = currentValue; 
+            if (typeof valueOutput === 'object' && valueOutput !== null && typeof previousValue === 'object' && previousValue !== null) {
+                // Object vs Object: Key itself should NOT be styled green.
+                // Let recursion handle highlighting of inner changes.
+                // keyString already includes the key and ": "
+                diffLines.push(`${keyString}{\n${highlightJsonDifferences(currentValue, previousValue, indentLevel + 1)}\n${childIndent}}`);
+            } else { 
+                // Primitive value changed, or type changed (e.g., obj to string or vice-versa).
+                // Style only the value part green.
+                const valueStyle = "background-color: #ddffdd;";
+                diffLines.push(`${keyString}<span style="${valueStyle}">${JSON.stringify(valueOutput)}</span>`);
+            }
+        } else { // UNCHANGED
+            valueOutput = currentValue;
+            if (typeof valueOutput === 'object' && valueOutput !== null) {
+                diffLines.push(`${keyString}{\n${highlightJsonDifferences(valueOutput, previousValue, indentLevel + 1)}\n${childIndent}}`);
+            } else {
+                diffLines.push(`${keyString}${JSON.stringify(valueOutput)}`);
             }
         }
-    }
-
-    return result;
-
-
+    });
+    return diffLines.join(",\n");
 }
+
 
 function showModal(content) {
     modal.innerHTML = content; // 모달에 내용을 추가
@@ -195,7 +245,7 @@ function showModal(content) {
 // apiKey is the full identifier like "GET /path/to/api"
 // apiId is the path part, e.g., "/path/to/api"
 // method is the HTTP method, e.g., "GET"
-function addIndicator(apiKey, apiId, method, status) {
+function addIndicator(apiKey, apiId, method, status, tagName) {
     const menuItem = document.createElement('div');
     menuItem.style.display = 'flex';
     menuItem.style.justifyContent = 'space-between';
@@ -213,13 +263,52 @@ function addIndicator(apiKey, apiId, method, status) {
     menuItemText.style.flexGrow = '1';
     menuItemText.style.cursor = 'pointer';
     menuItemText.setAttribute('data-api-key', apiKey); // Store the apiKey
+    menuItemText.setAttribute('data-api-tag', tagName || ''); // Store the tag name
 
     menuItemText.addEventListener('click', async (event) => {
         const clickedApiKey = event.currentTarget.getAttribute('data-api-key');
-        console.log(`[Swagger Extension] Menu item clicked for apiKey: ${clickedApiKey}`);
+        const apiTag = event.currentTarget.getAttribute('data-api-tag');
 
+        if (!apiTag) {
+            console.warn(`[Swagger Extension - UI] Missing data-api-tag for ${clickedApiKey}. Cannot reliably open tag.`);
+            // Optional: Fallback to old method if needed, or just fail here. For now, let's log and proceed to opblock search.
+            // If we proceed, it might work if the opblock is already visible.
+        }
+
+        let tagHeaderElement = null;
+        let tagSectionElement = null;
+
+        if (apiTag) {
+            // Attempt to find the tag header using the data-tag attribute.
+            tagHeaderElement = document.querySelector(`.opblock-tag[data-tag="${apiTag}"]`);
+            
+            if (tagHeaderElement) {
+                tagSectionElement = tagHeaderElement.closest('.opblock-tag-section');
+
+                const expandButton = tagHeaderElement.querySelector('button.expand-operation');
+                
+                if (expandButton && expandButton.getAttribute('aria-expanded') === 'false') {
+                    expandButton.click();
+                    await new Promise(resolve => setTimeout(resolve, 200)); // Wait for DOM to update
+                } else if (!expandButton && tagHeaderElement.getAttribute('data-is-open') === 'false') {
+                    // Fallback if only data-is-open is available on the header itself and header is clickable
+                    tagHeaderElement.click();
+                    await new Promise(resolve => setTimeout(resolve, 200)); 
+                } else {
+                }
+            } else {
+                console.warn(`[Swagger Extension - UI] Could not find tagHeaderElement for tag: "${apiTag}" using selector .opblock-tag[data-tag="${apiTag}"]`);
+            }
+        } else {
+        }
+
+        // Now, find the target .opblock
         let targetOpBlock = null;
-        const opBlocks = document.querySelectorAll('.opblock');
+        const searchContext = tagSectionElement && tagSectionElement.querySelector('.operation-tag-content') 
+                              ? tagSectionElement.querySelector('.operation-tag-content') 
+                              : document; // Fallback to whole document
+
+        const opBlocks = searchContext.querySelectorAll('.opblock');
         for (const opBlock of opBlocks) {
             const pathEl = opBlock.querySelector('.opblock-summary-path') || opBlock.querySelector('.opblock-summary-path__deprecated');
             const methodEl = opBlock.querySelector('.opblock-summary-method');
@@ -236,30 +325,9 @@ function addIndicator(apiKey, apiId, method, status) {
         }
 
         if (targetOpBlock) {
-            console.log(`[Swagger Extension] Found target .opblock for ${clickedApiKey}.`);
-            const parentTagSection = targetOpBlock.closest('.opblock-tag-section'); 
-            
-            if (parentTagSection) {
-                const tagHeader = parentTagSection.querySelector('.opblock-tag'); 
-                
-                if (tagHeader) {
-                    if (targetOpBlock.offsetParent === null) { 
-                        console.log(`[Swagger Extension] Parent tag for ${clickedApiKey} appears collapsed. Clicking header to expand.`);
-                        tagHeader.click(); 
-                        await new Promise(resolve => setTimeout(resolve, 200)); 
-                    }
-                } else {
-                    console.warn(`[Swagger Extension] Could not find tag header (.opblock-tag) for opblock with key: ${clickedApiKey}`);
-                }
-            } else {
-                console.warn(`[Swagger Extension] Could not find parent tag section (.opblock-tag-section) for opblock with key: ${clickedApiKey}`);
-            }
-            
-            console.log(`[Swagger Extension] Scrolling to target .opblock for ${clickedApiKey}.`);
             targetOpBlock.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
         } else {
-            console.error(`[Swagger Extension] Could not find .opblock for apiKey: ${clickedApiKey}`);
+            console.error(`[Swagger Extension - UI] Could not find .opblock for apiKey: ${clickedApiKey} after attempting to expand tag (if applicable).`);
         }
     });
 
@@ -283,15 +351,18 @@ function addIndicator(apiKey, apiId, method, status) {
 
         diffButton.addEventListener('click', (event) => {
             event.stopPropagation(); // 부모 요소의 클릭 이벤트 전파 방지
-            const storedAPIs = JSON.parse(localStorage.getItem('apiData') || '{}');
-            const previousAPI = storedAPIs[`${method} ${apiId}`];
-            const currentAPI = newAPIs[`${method} ${apiId}`];
+            
+            const apiKeyForLookup = apiKey; 
+
+            const previousAPI = globalStoredAPIs[apiKeyForLookup];
+            const currentAPI = globalNewAPIs[apiKeyForLookup];
+
 
             const diffContent = generateDiffContent(previousAPI, currentAPI);
             showModal(diffContent);
         });
 
-        menuItem.appendChild(diffButton); // 버튼을 오른쪽 끝에 추가
+        menuItem.appendChild(diffButton); 
     }
 
     menu.appendChild(menuItem);
@@ -304,26 +375,48 @@ async function saveAPIToLocalStorage() {
         return;
     }
 
-    localStorage.setItem('apiURL', apiURL); // URL을 로컬 스토리지에 저장
+    localStorage.setItem('apiURL', apiURL); 
 
     try {
         const apiData = await fetchAPIData(apiURL);
         localStorage.setItem('apiData', JSON.stringify(apiData));
         alert('api정보가 저장되었습니다.');
     } catch (error) {
-        console.error('네트워크창에서 api doc을 읽어오는 url을 등록해주세요:', error);
+        console.error('[Swagger Extension - Save] Error saving API data to localStorage:', error);
         alert('네트워크창에서 api doc을 읽어오는 url을 등록해주세요');
     }
 }
 
 async function fetchAPIData(apiURL) {
-    const response = await fetch(apiURL);
-    if (!response.ok) {
-        throw new Error('Network response was not ok');
-    }
-    const apiDoc = await response.json();
+    try {
+        const response = await fetch(apiURL);
 
-    const apiData = {};
+        if (response) {
+        } else {
+            console.error('[Swagger Extension - Fetch] fetchAPIData: Fetch call resolved but response object is null/undefined.');
+            throw new Error('Fetch call resolved but response object is null/undefined.');
+        }
+
+        if (!response.ok) {
+            console.error(`[Swagger Extension - Fetch] fetchAPIData: Network response was not ok for URL ${apiURL}. Status: ${response.status} ${response.statusText}`);
+            throw new Error(`Network response was not ok. Status: ${response.status} ${response.statusText}`);
+        }
+
+        let apiDoc;
+        try {
+            apiDoc = await response.json();
+        } catch (jsonError) {
+            console.error(`[Swagger Extension - Fetch] fetchAPIData: Error parsing JSON from URL ${apiURL}:`, jsonError);
+            try {
+                const textResponse = await response.text(); 
+                console.error(`[Swagger Extension - Fetch] fetchAPIData: Non-JSON response text (first 500 chars):`, textResponse.substring(0, 500));
+            } catch (textError) {
+                console.error(`[Swagger Extension - Fetch] fetchAPIData: Error getting response.text() after JSON parse failure:`, textError);
+            }
+            throw jsonError; 
+        }
+
+        const apiData = {};
 
     for (const [path, methods] of Object.entries(apiDoc.paths)) {
         for (const [method, details] of Object.entries(methods)) {
@@ -342,18 +435,23 @@ async function fetchAPIData(apiURL) {
                     return acc;
                 }, {})
                 : {};
+            const apiTag = details.tags && details.tags.length > 0 ? details.tags[0] : null;
 
             apiData[`${method.toUpperCase()} ${path}`] = {
                 method: method,
                 path: path,
+                tag: apiTag,
                 queryParams: queryParams,
                 bodyParams: bodyParams,
                 responses: responses
             };
         }
     }
-
     return apiData;
+} catch (error) {
+    console.error(`[Swagger Extension - Fetch] fetchAPIData: Error fetching or processing API from URL ${apiURL}:`, error);
+    throw error; 
+}
 }
 
 function resolveRef(schema, apiDoc) {
@@ -364,39 +462,96 @@ function resolveRef(schema, apiDoc) {
     return schema;
 }
 
-let newAPIs = {}
+let newAPIs = {} 
+let globalNewAPIs = {}; 
+let globalStoredAPIs = {}; 
+let mainLogicInitialized = false; 
 
-async function compareAndHighlightChanges() {
-    // console.log('[Swagger Extension] compareAndHighlightChanges called.'); // Removed for brevity
+// --- START NEW/REVISED GLOBALS AND FUNCTIONS ---
+
+function ensureClickListenerAttached() {
+    const swaggerUiElement = document.getElementById('swagger-ui');
+    if (swaggerUiElement && !swaggerUiElement.hasAttribute('data-custom-click-listener')) {
+        swaggerUiElement.addEventListener('click', handleSwaggerUiClick);
+        swaggerUiElement.setAttribute('data-custom-click-listener', 'true');
+    } else if (swaggerUiElement && swaggerUiElement.hasAttribute('data-custom-click-listener')) {
+        // Listener already attached
+    } else if (!swaggerUiElement) {
+        console.warn('[Swagger Extension - Lifecycle] ensureClickListenerAttached: #swagger-ui element not found. Cannot attach listener.');
+    }
+}
+
+async function initialSetup() {
+    if (mainLogicInitialized) {
+        return;
+    }
+    mainLogicInitialized = true;
+    
+    await populateSideMenuFromData(); 
+    ensureClickListenerAttached();    
+    
+    // >>> ADD DELAY AND LOGS HERE <<<
+    await new Promise(resolve => setTimeout(resolve, 300)); // 300ms delay
+    
+    compareAndHighlightChanges();     
+    
+}
+
+// --- END NEW/REVISED GLOBALS AND FUNCTIONS ---
+
+
+// --- START IMPLEMENTATION OF populateSideMenuFromData (assumed to be mostly correct from previous step) ---
+async function populateSideMenuFromData() {
     try {
-        const apiURL = localStorage.getItem('apiURL');
-        if (!apiURL) {
-            console.error('[Swagger Extension] No API URL found in local storage inside compareAndHighlightChanges.');
+        let apiURL;
+        try {
+            apiURL = localStorage.getItem('apiURL');
+            if (!apiURL) {
+                console.error('[Swagger Extension - MenuInit] apiURL not found in localStorage. Cannot populate menu.');
+                return;
+            }
+        } catch (e) {
+            console.error('[Swagger Extension - Storage] populateSideMenuFromData: Error getting apiURL from localStorage:', e);
             return;
         }
 
-        const storedAPIs = JSON.parse(localStorage.getItem('apiData') || '{}');
-        newAPIs = await fetchAPIData(apiURL); 
+        try {
+            const storedData = localStorage.getItem('apiData') || '{}';
+            globalStoredAPIs = JSON.parse(storedData);
+        } catch (e) {
+            console.error('[Swagger Extension - Storage] populateSideMenuFromData: Error parsing globalStoredAPIs from localStorage:', e);
+            globalStoredAPIs = {}; 
+        }
 
+        try {
+             globalNewAPIs = await fetchAPIData(apiURL); 
+        } catch (fetchError) {
+             console.error('[Swagger Extension - MenuInit] Error fetching new API data in populateSideMenuFromData:', fetchError);
+             return; 
+        }
+
+        if (!menu || !document.body.contains(menu)) { 
+            console.error('[Swagger Extension - MenuInit] Side menu DOM element (`menu`) not found or not in document. Cannot populate.');
+            return;
+        }
         menu.innerHTML = ''; 
-        // console.log('[Swagger Extension] Populating side menu from API data.'); // Removed for brevity
 
-        const allApiKeys = new Set([...Object.keys(newAPIs), ...Object.keys(storedAPIs)]);
-        let menuAddCount = 0;
+        const allApiKeys = new Set([...Object.keys(globalNewAPIs), ...Object.keys(globalStoredAPIs)]);
+        let itemsAddedToMenuCount = 0;
 
         allApiKeys.forEach(apiKey => {
-            const newApiDetail = newAPIs[apiKey];
-            const storedApiDetail = storedAPIs[apiKey];
-            
+            const newApiDetail = globalNewAPIs[apiKey];
+            const storedApiDetail = globalStoredAPIs[apiKey];
+            let status = null;
+            const apiTag = newApiDetail ? newApiDetail.tag : null; 
+
             const parts = apiKey.match(/^(\S+)\s+(.*)$/);
             if (!parts || parts.length < 3) {
-                console.warn(`[Swagger Extension] Could not parse apiKey for menu: ${apiKey}`);
+                console.warn(`[Swagger Extension - MenuInit] Could not parse apiKey for menu: ${apiKey}`);
                 return; 
             }
             const method = parts[1];
             const apiId = parts[2]; 
-
-            let status = null;
 
             if (newApiDetail && !storedApiDetail) {
                 status = 'created';
@@ -404,76 +559,80 @@ async function compareAndHighlightChanges() {
                 if (!deepEqual(newApiDetail, storedApiDetail)) { 
                     status = 'modified';
                 }
+            } else if (!newApiDetail && storedApiDetail) {
+                // status = 'deleted'; 
             }
 
             if (status) {
-                // console.log(`[Swagger Extension] Adding to menu: ${status} - ${apiKey}`); // Reduced verbosity
-                addIndicator(apiKey, apiId, method, status); 
-                menuAddCount++;
+                itemsAddedToMenuCount++;
+                addIndicator(apiKey, apiId, method, status, apiTag); 
             }
         });
-        
-        if (menuAddCount > 0) {
-            console.log(`[Swagger Extension] Added ${menuAddCount} items to the side menu.`);
-        }
 
-        const opBlocks = document.querySelectorAll('.opblock');
-        // console.log(`[Swagger Extension] Found ${opBlocks.length} .opblock elements for DOM styling.`); // Removed for brevity
-        if (opBlocks.length === 0 && allApiKeys.size > 0) { // Only warn if APIs were expected but no opblocks found
-            console.warn('[Swagger Extension] No .opblock elements found for DOM styling, though API data exists.');
-        }
-        let styledOpBlockCount = 0;
-
-        opBlocks.forEach((element) => { 
-            const apiId_path_el = element.querySelector('.opblock-summary-path');
-            let currentOpBlockApiId;
-            if (apiId_path_el === null) {
-                currentOpBlockApiId = element.querySelector('.opblock-summary-path__deprecated')?.textContent?.trim();
-            } else {
-                currentOpBlockApiId = apiId_path_el.textContent?.trim();
-            }
-            const currentOpBlockMethod = element.querySelector('.opblock-summary-method')?.textContent?.trim();
-
-            if (!currentOpBlockApiId || !currentOpBlockMethod) {
-                console.warn('[Swagger Extension] Could not determine apiId or method for an opblock for DOM styling:', element);
-                return; 
-            }
-            
-            const opBlockApiKey = `${currentOpBlockMethod} ${currentOpBlockApiId}`;
-
-            if (newAPIs[opBlockApiKey]) {
-                const newApiDetail = newAPIs[opBlockApiKey];
-                const storedApiDetail = storedAPIs[opBlockApiKey];
-
-                let needsStyling = false;
-                if (storedApiDetail) {
-                    if (!deepEqual(newApiDetail, storedApiDetail)) { 
-                        needsStyling = true;
-                    }
-                } else { 
-                    needsStyling = true;
-                }
-
-                if (needsStyling) {
-                    element.style.border = '2px solid red';
-                    addUpdateButton(element, opBlockApiKey, newApiDetail);
-                    styledOpBlockCount++;
-                }
-            }
-        });
-        if (styledOpBlockCount > 0) {
-            console.log(`[Swagger Extension] Styled ${styledOpBlockCount} opblocks with changes on the page.`);
-        }
 
     } catch (error) {
-        console.error('[Swagger Extension] Error in compareAndHighlightChanges:', error);
+        console.error('[Swagger Extension - MenuInit] General error in populateSideMenuFromData:', error);
     }
 }
+// --- END IMPLEMENTATION OF populateSideMenuFromData ---
+
+
+function compareAndHighlightChanges() { // Now synchronous
+
+    if (!globalNewAPIs || Object.keys(globalNewAPIs).length === 0) {
+        console.warn('[Swagger Extension - Styling] globalNewAPIs is not populated or empty. Skipping styling of .opblocks.');
+        return;
+    }
+
+    const opBlocks = document.querySelectorAll('.opblock');
+    let styledOpBlocksCount = 0;
+
+    opBlocks.forEach((element) => {
+        const apiId_path_el = element.querySelector('.opblock-summary-path');
+        let currentOpBlockApiId;
+        if (apiId_path_el === null) {
+            currentOpBlockApiId = element.querySelector('.opblock-summary-path__deprecated')?.textContent?.trim();
+        } else {
+            currentOpBlockApiId = apiId_path_el.textContent?.trim();
+        }
+        const currentOpBlockMethod = element.querySelector('.opblock-summary-method')?.textContent?.trim();
+
+        if (!currentOpBlockApiId || !currentOpBlockMethod) {
+            return; 
+        }
+        
+        const opBlockApiKey = `${currentOpBlockMethod} ${currentOpBlockApiId}`;
+
+        const newApiDetail = globalNewAPIs[opBlockApiKey];
+        const storedApiDetail = globalStoredAPIs[opBlockApiKey]; 
+        let needsStyling = false;
+
+        if (newApiDetail) {
+            if (storedApiDetail) { 
+                if (!deepEqual(newApiDetail, storedApiDetail)) { 
+                    needsStyling = true;
+                }
+            } else { 
+                needsStyling = true;
+            }
+
+            if (needsStyling) {
+                styledOpBlocksCount++;
+                element.style.border = '2px solid red';
+                addUpdateButton(element, opBlockApiKey, newApiDetail); 
+            }
+        } 
+    });
+
+    if (opBlocks.length > 0) { 
+    } 
+}
+
 
 function addUpdateButton(element, apiKey, newAPI) {
     const existingButton = element.querySelector('.update-api-button');
     if (existingButton) {
-        return; // 이미 버튼이 있는 경우 중복 추가하지 않음
+        return; 
     }
 
     const updateButton = document.createElement('button');
@@ -490,8 +649,8 @@ function addUpdateButton(element, apiKey, newAPI) {
         let storedAPIs = JSON.parse(localStorage.getItem('apiData') || '{}');
         storedAPIs[apiKey] = newAPI;
         localStorage.setItem('apiData', JSON.stringify(storedAPIs));
-        element.style.border = ''; // 빨간 테두리 제거
-        updateButton.remove(); // 업데이트 버튼 제거
+        element.style.border = ''; 
+        updateButton.remove(); 
     });
 
     const summaryElement = element.querySelector('.opblock-summary');
@@ -519,50 +678,46 @@ function isSwaggerLoaded() {
 
 // Function to handle clicks on Swagger UI for tag expansion
 function handleSwaggerUiClick(event) {
-    const targetElement = event.target;
-    const clickedTagHeader = targetElement.closest('.opblock-tag');
-
+    const clickedTagHeader = event.target.closest('.opblock-tag');
     if (clickedTagHeader) {
-        console.log('[Swagger Extension] Tag expansion click detected, re-evaluating highlights.');
         setTimeout(() => {
-            compareAndHighlightChanges();
-        }, 100); 
+            compareAndHighlightChanges(); // Call the synchronous, styling-only version
+        }, 200); 
     }
 }
 
-// MutationObserver를 사용하여 API 블록 로드를 감지
-const observer = new MutationObserver((mutations, obs) => {
-    const swaggerUiElement = document.getElementById('swagger-ui'); 
-    if (swaggerUiElement && isSwaggerLoaded()) { 
-        console.log("[Swagger Extension] Swagger UI detected by observer, running initial comparison.");
-        compareAndHighlightChanges();
 
-        if (!swaggerUiElement.hasAttribute('data-custom-click-listener')) {
-            swaggerUiElement.addEventListener('click', handleSwaggerUiClick);
-            swaggerUiElement.setAttribute('data-custom-click-listener', 'true');
-            console.log("[Swagger Extension] Attaching click listener to #swagger-ui (via MutationObserver).");
-        }
-        obs.disconnect(); 
-        console.log("[Swagger Extension] MutationObserver disconnected.");
+// --- START REVISED INITIALIZATION LOGIC ---
+
+// MutationObserver: Simplified to only trigger initialSetup once #swagger-ui is found.
+const observer = new MutationObserver(async (mutations, obs) => {
+    const swaggerUiElement = document.getElementById('swagger-ui');
+    if (swaggerUiElement) {
+        obs.disconnect(); // Stop observing
+        await initialSetup(); // Perform the one-time setup
     }
 });
 
 const config = { childList: true, subtree: true };
-const targetNode = document.getElementById('swagger-ui');
 
-if (targetNode) {
-    // Initial check in case swagger is already fully loaded
-    if (isSwaggerLoaded()) {
-        console.log("[Swagger Extension] Swagger UI already loaded on initial script run. Performing initial comparison.");
-        compareAndHighlightChanges();
-        if (!targetNode.hasAttribute('data-custom-click-listener')) {
-            targetNode.addEventListener('click', handleSwaggerUiClick);
-            targetNode.setAttribute('data-custom-click-listener', 'true');
-            console.log("[Swagger Extension] Attaching click listener to #swagger-ui (initial direct check).");
-        }
-    }
-    observer.observe(targetNode, config);
-    console.log("[Swagger Extension] MutationObserver is now observing #swagger-ui.");
+// Initial Script Execution Logic
+const immediateSwaggerUi = document.getElementById('swagger-ui');
+if (immediateSwaggerUi && !mainLogicInitialized) {
+    initialSetup(); 
+}
+
+const targetNodeForObserver = document.getElementById('swagger-ui');
+if (targetNodeForObserver) {
+    observer.observe(targetNodeForObserver, config);
 } else {
-    console.error('[Swagger Extension] Swagger UI root element (#swagger-ui) not found for observer setup at script load.');
+    console.warn('[Swagger Extension - Lifecycle] #swagger-ui not found at script start for observer. Using window.load fallback.');
+    window.addEventListener('load', async () => {
+        const swaggerUiOnLoad = document.getElementById('swagger-ui');
+        if (swaggerUiOnLoad && !mainLogicInitialized) {
+            await initialSetup();
+        } else if (!swaggerUiOnLoad) {
+            console.error('[Swagger Extension - Lifecycle] #swagger-ui still not found on window.load. Extension may not function.');
+        } else if (mainLogicInitialized) {
+        }
+    });
 }
