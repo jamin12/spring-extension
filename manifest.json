@@ -23,7 +23,9 @@
         }
     ],
     "action": {
-        "128": "images/spring-extension-icon.png"
+        "default_icon": {
+            "128": "images/spring-extension-icon.png"
+        }
     },
     "icons": {
         "128": "images/spring-extension-icon.png"
